@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Mongoid | My Little Diary]]></title>
+  <link href="http://ahmadsherif.github.com/blog/categories/mongoid/atom.xml" rel="self"/>
+  <link href="http://ahmadsherif.github.com/"/>
+  <updated>2013-01-30T00:04:37+02:00</updated>
+  <id>http://ahmadsherif.github.com/</id>
+  <author>
+    <name><![CDATA[Ahmad Sherif]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Mongoid default fields can give you hard time]]></title>
+    <link href="http://ahmadsherif.github.com/blog/2013/01/29/mongoid-default-fields-can-give-you-hard-time/"/>
+    <updated>2013-01-29T22:56:00+02:00</updated>
+    <id>http://ahmadsherif.github.com/blog/2013/01/29/mongoid-default-fields-can-give-you-hard-time</id>
+    <content type="html"><![CDATA[<p>So I was coding peacefully when our product owner was doing some tests on
+the new features we implemented over that past two weeks. He pulls,
+bundles, runs the server and goes to the index route only to find the cheerful
+an empty page. "Where are my previous records?" he might have thought, "I didn't drop the db".
+He's of a good technical expierence so he fires up Rails console to inspect this issue; one command, press
+Enter, and Voila, the documents are there!</p>
+
+<!-- more -->
+
+
+<p>He decides to call me to tell me that I'm a lousy developer that doesn't
+deserve his salary and to fix this issue ASAP so he can deserve his
+salary too :).</p>
+
+<p>So what do we have in here? A model named <code>Post</code> (not a real example,
+but the point is the same) with a pretty straight-forward lines:</p>
+
+<p>``` ruby
+class Post
+  include Mongoid::Document</p>
+
+<p>  field :title
+  field :content
+  field :published, type: Boolean, default: true
+  field :visits_count</p>
+
+<p>  scope :most_visited, Proc.new { where(published: true).desc(:visits_count) }
+end
+```</p>
+
+<p>The controller is no different too:</p>
+
+<p>``` ruby</p>
+
+<pre><code>class PostsController &lt; ApplicationController
+  def index
+    @posts = Post.most_visited
+  end
+end
+</code></pre>
+
+<p>```</p>
+
+<p>So what's the problem? I don't trust anyone by default when it comes to
+code, so I switch to the console and see for my self:</p>
+
+<p>``` bash</p>
+
+<pre><code>1.9.3p327 :001 &gt; Post.most_visited.to_a
+=&gt; []
+1.9.3p327 :002 &gt; Post.all.to_a
+=&gt; [#&lt;Post _id: 50f81a92c12d4d6b35000002, _type: nil, title: 'blah', content: 'another blah', published: true, visits_count: 5&gt;, #&lt;Post _id: 50f81a92c12d4d6b35000003, _type: nil, title: 'meh', content: 'another meh', published: true, visits_count: 3&gt;]
+</code></pre>
+
+<p>```</p>
+
+<p>OK, he wasn't lying about it, but what the X? The scope is only using
+one condition (<code>published: true</code>) and <code>Post.all</code> says that all records has
+<code>published</code> set to true. After debugging and checking everything that
+could cause such weirdness, he decided that it's a waste of time to continue and
+dropping database and starting from scratch would be the solution for
+now. As a shot in the dark, I decided to check Mongo itself, maybe it
+can tell us what on Earth is going on.</p>
+
+<p>``` bash</p>
+
+<pre><code>$ mongo
+&gt; use blog_development
+&gt; db.posts.findOne()
+{
+        "_id" : ObjectId("50f81a92c12d4d6b35000003"),
+        "title" : "blah",
+        "content" : "another blah",
+        "visits_count" : 5
+}
+</code></pre>
+
+<p>```</p>
+
+<p>See the issue? There's no <code>published</code> propery for the document! Then
+what are those documents we got from Rails console?</p>
+
+<p>Turns out the problem was that I added <code>published</code> field to the model
+after those documents were already persisted, Mongoid was just filling
+in <code>published</code> because it got it in the model, set it to true because I
+told it to. We were telling Mongo to filter by <code>published</code> but it
+doesn't find any <code>published</code> properties on the documents so it returns
+nothing. Pretty simple but Mongoid made us take it for granted
+that <code>published</code> was there, Damn you Mongoid, this isn't the first time!</p>
+
+<p>The rest is easy, calling save on the documents made everything work
+just fine (a quick-n-dirty solution, running <code>update_all</code> should be the
+way), but we learned a valuable lesson, you don't mess with fields with
+default value without making a Rake task to populate them, or you run in
+circles while the solution was just there, hidden in plain sight.</p>
+
+<p>PS: We're good friends, me and the product owner, I'm just being
+sarcastic here :D.</p>
+]]></content>
+  </entry>
+  
+</feed>
